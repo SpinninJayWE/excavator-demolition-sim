@@ -74,6 +74,7 @@ export class BuildingManager {
       matKey,
       pos: pos.clone(),
       half: half.clone(),
+      radius: half.length(),
       hp,
       maxHp: hp,
       value: MATERIALS[matKey].value * (opts.valueScale ?? 1),
@@ -162,6 +163,32 @@ export class BuildingManager {
       const o = 0.3 + Math.sin(this._pulseTime * 3.2) * 0.25
       for (const b of this.buildings) {
         if (b.outlineVisible) b.outline.material.opacity = o * (1 - b.damageRatio() * 0.9)
+      }
+    }
+  }
+
+  // 生成完成后把每个 InstancedMesh 压缩到实际砖块数量，避免大量隐藏实例仍参与绘制
+  _compactGroups() {
+    const color = new THREE.Color()
+    for (const b of this.buildings) {
+      for (const g of b.groups.values()) {
+        const inst = g.inst
+        if (g.count <= 0 || g.count >= inst.count) continue
+        const compact = new THREE.InstancedMesh(this.unitGeo, inst.material, g.count)
+        compact.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+        compact.castShadow = true
+        compact.receiveShadow = true
+        compact.frustumCulled = false
+        for (let i = 0; i < g.count; i++) {
+          inst.getMatrixAt(i, _m)
+          compact.setMatrixAt(i, _m)
+          if (inst.instanceColor) compact.setColorAt(i, inst.getColorAt(i, color))
+        }
+        compact.instanceMatrix.needsUpdate = true
+        if (compact.instanceColor) compact.instanceColor.needsUpdate = true
+        this.scene.remove(inst)
+        this.scene.add(compact)
+        g.inst = compact
       }
     }
   }
@@ -272,6 +299,7 @@ export class BuildingManager {
     this._makeBuilding('lighthouse', 22, 20)
     this._makeBuilding('pagoda', -24, 18)
     this._makeBuilding('church', 24, -12)
+    this._compactGroups()
   }
 }
 

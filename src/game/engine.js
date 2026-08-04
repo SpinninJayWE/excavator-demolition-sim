@@ -163,7 +163,7 @@ export class GameEngine {
         const dx = b.x - part.pos.x
         const dy = b.y - part.pos.y
         const dz = b.z - part.pos.z
-        const far = brick.half.length() + r2
+        const far = brick.radius + r2
         if (dx * dx + dy * dy + dz * dz > far * far) continue
         if (!brick.collider.intersectsShape(part.shape, part.pos, part.quat)) continue
         brick._hitStep = step
@@ -265,12 +265,12 @@ export class GameEngine {
     if (state !== 'menu' && state !== 'paused' && state !== 'complete' && state !== 'failed') {
       this.acc += dt
       let steps = 0
-      while (this.acc >= FIXED_STEP && steps < 5) {
+      while (this.acc >= FIXED_STEP && steps < 3) {
         this._step(FIXED_STEP)
         this.acc -= FIXED_STEP
         steps++
       }
-      if (steps === 5) this.acc = 0
+      if (steps === 3) this.acc = 0
     } else if (state === 'menu') {
       this._menuOrbit(dt)
     } else {
@@ -281,7 +281,6 @@ export class GameEngine {
     this.particles.update(dt, this.time)
     this.sparks.update(dt, this.time)
     this.debris.update(dt, this.time)
-    this.buildings.update(dt)
 
     this._snapshotTimer -= dt
     if (this._snapshotTimer <= 0) {

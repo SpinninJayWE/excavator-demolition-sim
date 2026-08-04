@@ -122,6 +122,8 @@ export class DebrisSystem {
           this.remove(c)
           continue
         }
+        // 已入睡且矩阵已同步过，位置不再变化，跳过矩阵写入
+        if (c.sleepingSince !== time) continue
       } else {
         c.sleepingSince = null
       }
