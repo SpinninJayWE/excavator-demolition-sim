@@ -26,6 +26,15 @@ export const MATERIALS = {
   wood: { key: 'wood', name: '木板', value: 12, density: 600, base: 0x8a6542, roughness: 0.95 },
   block: { key: 'block', name: '水泥砖', value: 20, density: 1000, base: 0x9b9a94, roughness: 0.95 },
   frame: { key: 'frame', name: '钢框架', value: 55, density: 1700, base: 0x4d5156, roughness: 0.5, metalness: 0.7 },
+  red: { key: 'red', name: '红色面板', value: 15, density: 800, base: 0xe0483a, roughness: 0.72 },
+  orange: { key: 'orange', name: '橙色面板', value: 15, density: 800, base: 0xf28c28, roughness: 0.72 },
+  yellow: { key: 'yellow', name: '黄色面板', value: 15, density: 800, base: 0xf0c61e, roughness: 0.68 },
+  green: { key: 'green', name: '绿色面板', value: 15, density: 800, base: 0x4fae4e, roughness: 0.72 },
+  blue: { key: 'blue', name: '蓝色面板', value: 15, density: 800, base: 0x3f7fc2, roughness: 0.72 },
+  purple: { key: 'purple', name: '紫色面板', value: 15, density: 800, base: 0x8b5bb4, roughness: 0.72 },
+  teal: { key: 'teal', name: '青色面板', value: 15, density: 800, base: 0x2fa39b, roughness: 0.72 },
+  white: { key: 'white', name: '白色墙体', value: 18, density: 900, base: 0xe8e2d8, roughness: 0.9 },
+  stone: { key: 'stone', name: '石块', value: 30, density: 1200, base: 0x9a928a, roughness: 0.95 },
 }
 
 export const CONTRACTS = [

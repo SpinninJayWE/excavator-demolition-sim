@@ -7,7 +7,11 @@ const _q = new THREE.Quaternion()
 const _s = new THREE.Vector3()
 const _v = new THREE.Vector3()
 
-const HP_BASE = { brick: 45, concrete: 120, steel: 70, wood: 25, block: 35, frame: 90 }
+const HP_BASE = {
+  brick: 45, concrete: 120, steel: 70, wood: 25, block: 35, frame: 90,
+  red: 35, orange: 35, yellow: 35, green: 35, blue: 35, purple: 35, teal: 35,
+  white: 45, stone: 75,
+}
 
 function tint(matKey) {
   const c = new THREE.Color(MATERIALS[matKey].base)
@@ -260,6 +264,14 @@ export class BuildingManager {
     this._makeBuilding('chimney', 20, 9)
     this._makeBuilding('blockPile', -14, 24)
     this._makeBuilding('woodStack', 14, 20)
+    this._makeBuilding('rainbowWall', 30, 2)
+    this._makeBuilding('containers', 26, -28)
+    this._makeBuilding('castle', -2, -28)
+    this._makeBuilding('pyramid', 18, -40)
+    this._makeBuilding('windmill', -24, -32)
+    this._makeBuilding('lighthouse', 22, 20)
+    this._makeBuilding('pagoda', -24, 18)
+    this._makeBuilding('church', 24, -12)
   }
 }
 
@@ -436,5 +448,165 @@ const GENERATORS = {
       const h = 0.1 + Math.random() * 0.5
       brickAt(bm, bld, 'wood', x, h / 2, z, 0.5, h / 2, 0.5, { hpScale: 0.8 })
     }
+  },
+
+  // 彩虹墙：一排色彩鲜艳的面板墙，撞起来非常解压
+  rainbowWall(bm, bld, bx, bz) {
+    const colors = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'teal']
+    for (let j = 0; j < 3; j++) {
+      const y = 0.5 + j * 1.0
+      for (let i = 0; i < 10; i++) {
+        const x = 0.5 + i * 1.0
+        brickAt(bm, bld, colors[(i + j) % colors.length], bx + x, y, bz, 0.5, 0.5, 0.35)
+      }
+    }
+    for (let i = 0; i < 10; i++) {
+      brickAt(bm, bld, 'block', bx + 0.5 + i * 1.0, 0.15, bz, 0.5, 0.15, 0.35)
+    }
+  },
+
+  // 集装箱堆：两堆五颜六色的大集装箱，一铲子就能掀翻
+  containers(bm, bld, bx, bz) {
+    const colors = ['red', 'blue', 'green', 'yellow', 'orange', 'teal']
+    for (const dz of [-3, 3]) {
+      const stack = dz > 0 ? 3 : 0
+      for (let layer = 0; layer < 3; layer++) {
+        const y = 1.1 + layer * 2.2
+        const count = layer === 2 ? 1 : 2
+        for (let k = 0; k < count; k++) {
+          const zOff = layer === 2 ? 0 : k === 0 ? -1.3 : 1.3
+          const mat = colors[(stack + layer + k) % colors.length]
+          brickAt(bm, bld, mat, bx, y, bz + dz + zOff, 2.2, 1.1, 1.25, { hpScale: 1.1, valueScale: 1.2 })
+        }
+      }
+    }
+  },
+
+  // 城堡：城墙 + 城齿 + 四角塔楼，带彩旗
+  castle(bm, bld, bx, bz) {
+    const W = 10, D = 8
+    for (let y = 0; y < 2; y++) {
+      const cy = 0.4 + y * 1.4
+      for (let i = 0; i < 10; i++) {
+        const x = 0.35 + i * 1.0
+        brickAt(bm, bld, 'stone', bx + x, cy, bz, 0.5, 0.4, 0.35)
+        brickAt(bm, bld, 'stone', bx + x, cy, bz + D, 0.5, 0.4, 0.35)
+      }
+      for (let i = 0; i < 8; i++) {
+        const z = 0.35 + i * 1.0
+        brickAt(bm, bld, 'stone', bx, cy, bz + z, 0.35, 0.4, 0.5)
+        brickAt(bm, bld, 'stone', bx + W, cy, bz + z, 0.35, 0.4, 0.5)
+      }
+    }
+    for (let i = 0; i < 10; i += 2) {
+      brickAt(bm, bld, 'stone', bx + 0.35 + i * 1.0, 3.15, bz, 0.45, 0.35, 0.35)
+      brickAt(bm, bld, 'stone', bx + 0.35 + i * 1.0, 3.15, bz + D, 0.45, 0.35, 0.35)
+    }
+    const corners = [[0, 0], [W, 0], [0, D], [W, D]]
+    for (let t = 0; t < corners.length; t++) {
+      const [cx, cz] = corners[t]
+      for (let i = 0; i < 6; i++) {
+        brickAt(bm, bld, 'stone', bx + cx, 0.4 + i * 0.7, bz + cz, 0.55, 0.35, 0.55, { hpScale: 1.2 })
+      }
+      brickAt(bm, bld, t % 2 ? 'red' : 'yellow', bx + cx, 5.15, bz + cz, 0.08, 0.5, 0.2)
+    }
+    // 城门
+    brickAt(bm, bld, 'wood', bx + 4.4, 0.7, bz, 0.6, 0.7, 0.08, { decorative: true })
+  },
+
+  // 金字塔：层层堆叠，顶上是金色塔尖
+  pyramid(bm, bld, bx, bz) {
+    const layers = 6
+    for (let l = 0; l < layers; l++) {
+      const n = layers - l
+      const y = 0.5 + l * 0.9
+      const off = l * 0.45
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          const mat = l === layers - 1 ? 'yellow' : l % 2 ? 'block' : 'concrete'
+          brickAt(bm, bld, mat, bx + off + 0.5 + i * 1.0, y, bz + off + 0.5 + j * 1.0, 0.5, 0.45, 0.5, { hpScale: 0.9 })
+        }
+      }
+    }
+  },
+
+  // 风车：条纹塔身 + 四片风叶
+  windmill(bm, bld, bx, bz) {
+    for (let i = 0; i < 7; i++) {
+      const s = 1.0 - i * 0.09
+      brickAt(bm, bld, i % 2 ? 'white' : 'block', bx, 0.45 + i * 0.8, bz, s, 0.4, s, { hpScale: 1.1 })
+    }
+    for (let k = 0; k < 4; k++) {
+      const th = (k * Math.PI) / 2
+      brickAt(bm, bld, 'wood', bx + Math.sin(th) * 1.3, 6.3 + Math.cos(th) * 1.3, bz, 0.18, 1.3, 0.18, { rotZ: th, hpScale: 0.8, valueScale: 0.8 })
+    }
+    brickAt(bm, bld, 'red', bx, 6.3, bz, 0.45, 0.4, 0.45)
+    brickAt(bm, bld, 'red', bx, 0.5, bz + 0.85, 0.22, 0.5, 0.06, { decorative: true })
+  },
+
+  // 灯塔：红白相间的条纹塔，顶端发光
+  lighthouse(bm, bld, bx, bz) {
+    for (let i = 0; i < 12; i++) {
+      brickAt(bm, bld, i % 2 ? 'red' : 'white', bx, 0.4 + i * 0.5, bz, 0.55, 0.25, 0.55, { hpScale: 0.9 })
+    }
+    brickAt(bm, bld, 'yellow', bx, 6.8, bz, 0.62, 0.18, 0.62, { hpScale: 0.9 })
+    brickAt(bm, bld, 'yellow', bx, 7.25, bz, 0.3, 0.25, 0.3)
+  },
+
+  // 宝塔：三层中式楼阁，红柱 + 飞檐 + 金顶
+  pagoda(bm, bld, bx, bz) {
+    const tiers = 3
+    for (let t = 0; t < tiers; t++) {
+      const yBase = 1.0 + t * 1.7
+      const s = 2.0 - t * 0.5
+      for (const [cx, cz] of [[-s, -s], [s, -s], [-s, s], [s, s]]) {
+        brickAt(bm, bld, 'red', bx + cx, yBase, bz + cz, 0.28, 1.2, 0.28, { hpScale: 0.9 })
+      }
+      for (let i = -1; i <= 1; i++) {
+        brickAt(bm, bld, 'block', bx + i * (s * 0.7), yBase, bz - s, 0.25, 0.3, 0.08, { decorative: i !== 0 })
+        brickAt(bm, bld, 'block', bx + i * (s * 0.7), yBase, bz + s, 0.25, 0.3, 0.08, { decorative: i !== 0 })
+        brickAt(bm, bld, 'block', bx - s, yBase, bz + i * (s * 0.7), 0.08, 0.3, 0.25, { decorative: i !== 0 })
+        brickAt(bm, bld, 'block', bx + s, yBase, bz + i * (s * 0.7), 0.08, 0.3, 0.25, { decorative: i !== 0 })
+      }
+      const roofW = s + 1.0
+      brickAt(bm, bld, 'wood', bx, yBase + 1.3, bz, roofW / 2, 0.14, roofW / 2, { hpScale: 0.8 })
+      brickAt(bm, bld, 'wood', bx, yBase + 1.18, bz - roofW / 2 + 0.1, roofW / 2, 0.08, 0.3, { rotZ: 0.4, hpScale: 0.8 })
+      brickAt(bm, bld, 'wood', bx, yBase + 1.18, bz + roofW / 2 - 0.1, roofW / 2, 0.08, 0.3, { rotZ: -0.4, hpScale: 0.8 })
+      brickAt(bm, bld, 'wood', bx - roofW / 2 + 0.1, yBase + 1.18, bz, 0.3, 0.08, roofW / 2, { hpScale: 0.8 })
+      brickAt(bm, bld, 'wood', bx + roofW / 2 - 0.1, yBase + 1.18, bz, 0.3, 0.08, roofW / 2, { hpScale: 0.8 })
+      brickAt(bm, bld, 'yellow', bx, yBase + 1.55, bz, 0.18, 0.3, 0.18, { valueScale: 1.2 })
+    }
+    brickAt(bm, bld, 'stone', bx, 0.25, bz, 2.3, 0.25, 2.3)
+  },
+
+  // 教堂：大厅 + 彩色玻璃窗 + 钟楼
+  church(bm, bld, bx, bz) {
+    const W = 8, D = 6
+    for (let j = 0; j < 6; j++) {
+      const y = 0.2 + j * 0.4
+      for (let i = 0; i < 12; i++) {
+        const x = 0.3 + i * 0.6
+        if (x > 3.4 && x < 4.6 && y < 1.6) continue
+        brickAt(bm, bld, 'block', bx + x, y, bz, 0.3, 0.2, 0.12)
+        brickAt(bm, bld, 'block', bx + x, y, bz + D, 0.3, 0.2, 0.12)
+      }
+      for (let i = 0; i < 10; i++) {
+        const z = 0.3 + i * 0.6
+        brickAt(bm, bld, 'block', bx, y, bz + z, 0.12, 0.2, 0.3)
+        brickAt(bm, bld, 'block', bx + W, y, bz + z, 0.12, 0.2, 0.3)
+      }
+    }
+    const glass = ['red', 'blue', 'yellow', 'green', 'purple']
+    for (let i = 0; i < 4; i++) {
+      brickAt(bm, bld, glass[i], bx + 1.3 + i * 1.7, 1.6, bz, 0.22, 0.45, 0.06, { decorative: true })
+      brickAt(bm, bld, glass[i + 1], bx + 1.3 + i * 1.7, 1.6, bz + D, 0.22, 0.45, 0.06, { decorative: true })
+    }
+    for (let i = 0; i < 10; i++) {
+      brickAt(bm, bld, 'wood', bx + 0.3 + i * 0.6, 2.8, bz + D / 2, 0.3, 0.1, D / 2 + 0.2, { hpScale: 0.8 })
+    }
+    for (let i = 0; i < 7; i++) {
+      brickAt(bm, bld, 'block', bx + 0.7, 0.2 + i * 0.7, bz + D / 2, 0.45, 0.35, 0.45, { hpScale: 1.1 })
+    }
+    brickAt(bm, bld, 'red', bx + 0.7, 5.45, bz + D / 2, 0.18, 0.6, 0.18, { valueScale: 1.2 })
   },
 }
