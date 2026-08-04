@@ -1,4 +1,5 @@
 ﻿import * as THREE from 'three'
+import * as RAPIER from '@dimforge/rapier3d-compat'
 import { ensureRapier, Physics } from './physics.js'
 import { createRenderer } from './renderer.js'
 import { AudioSys } from './audio.js'
@@ -14,8 +15,15 @@ import { FIXED_STEP, loadLS, saveLS, CONTRACTS } from './constants.js'
 
 const BALL_RADIUS = 0.55
 
-const _teeth = new THREE.Vector3()
-const _vel = new THREE.Vector3()
+// 各部件伤害参数：外接半径、击碎速度阈值、每帧伤害系数
+const PART_DEFS = [
+  { radius: BALL_RADIUS, breakSpeed: 7.2, dmg: 0.9 }, // 铲斗齿（保留原有逻辑）
+  { radius: 0.78, breakSpeed: 7.2, dmg: 0.9 }, // 铲斗箱体
+  { radius: 1.78, breakSpeed: 5.5, dmg: 1.0 }, // 大臂
+  { radius: 1.47, breakSpeed: 5.5, dmg: 1.0 }, // 小臂
+  { radius: 2.37, breakSpeed: 4.2, dmg: 1.1 }, // 车身
+]
+
 const _imp = new THREE.Vector3()
 const _ang = new THREE.Vector3()
 const _pos = new THREE.Vector3()
@@ -28,6 +36,7 @@ export class GameEngine {
     this._snapshotTimer = 0
     this._impactCd = 0
     this._dustCd = 0
+    this._stepCount = 0
     this._trackDustCd = 0
     this._prevHorn = false
     this._muted = loadLS('muted', false)
@@ -57,6 +66,27 @@ export class GameEngine {
     this.camera = this.r.camera
 
     this.physics = new Physics()
+
+    // 各部件伤害碰撞形状（与视觉网格对齐，由 Excavator.fillParts 每帧填充位置/朝向/速度）
+    this._parts = PART_DEFS.map((d) => ({
+      shape: null,
+      pos: new THREE.Vector3(),
+      quat: new THREE.Quaternion(),
+      dir: new THREE.Vector3(),
+      speed: 0,
+      radius: d.radius,
+      breakSpeed: d.breakSpeed,
+      dmg: d.dmg,
+    }))
+    const partShapes = [
+      new RAPIER.Ball(BALL_RADIUS),
+      new RAPIER.Cuboid(0.4, 0.32, 0.58),
+      new RAPIER.Cuboid(1.75, 0.21, 0.25),
+      new RAPIER.Cuboid(1.45, 0.16, 0.19),
+      new RAPIER.Cuboid(1.6, 0.9, 1.5),
+    ]
+    for (let i = 0; i < this._parts.length; i++) this._parts[i].shape = partShapes[i]
+
     this.audio = new AudioSys()
     this.audio.setMuted(this._muted)
     this.input = new Input()
@@ -89,15 +119,15 @@ export class GameEngine {
     this.ui.onEvent?.(event)
   }
 
-  _onBrickBreak(brick, source) {
+  _onBrickBreak(brick, source, speed) {
     this.mission.onBrickBreak(brick.value)
     const metal = brick.matKey === 'steel' || brick.matKey === 'frame'
     const pos = brick.pos
     if (source === 'hit') {
-      const speed = Math.min(1, this.excavator.teethVel.length() / 9)
-      this.particles.burst(pos, 10 + Math.floor(speed * 14), 1.6 + speed * 2, { color: metal ? 0xcfd4d8 : 0xb8a88c, spread: 1.6, up: 1.8 })
+      const s = Math.min(1, (speed ?? this.excavator.teethVel.length()) / 9)
+      this.particles.burst(pos, 10 + Math.floor(s * 14), 1.6 + s * 2, { color: metal ? 0xcfd4d8 : 0xb8a88c, spread: 1.6, up: 1.8 })
       if (metal) this.sparks.burst(pos, 6, 3.2, { spread: 1.2, up: 2.2, color: 0xffb347 })
-      this.audio.crack(0.6 + speed * 0.4)
+      this.audio.crack(0.6 + s * 0.4)
       if (metal) this.audio.clank()
     } else {
       this.particles.burst(pos, 5, 1.2, { color: 0xb8a88c, spread: 1.0, up: 1.2 })
@@ -110,66 +140,76 @@ export class GameEngine {
     this.audio.impact(0.5, true)
   }
 
-  _bucketDig() {
-    const ex = this.excavator
-    ex.getTeethPos(_teeth)
-    _vel.copy(ex.teethVel)
-    const speed = _vel.length()
-    if (speed < 0.45) return
-
-    const r2 = BALL_RADIUS
+  _machineDamage() {
+    this.excavator.fillParts(this._parts)
+    const bricks = this.buildings.bricks
+    const step = this._stepCount
     let hits = 0
     let anyHit = false
     let hitMetal = false
-    const bricks = this.buildings.bricks
-    for (let i = 0; i < bricks.length; i++) {
-      const brick = bricks[i]
-      if (brick.broken) continue
-      const b = brick.pos
-      const dx = b.x - _teeth.x
-      const dy = b.y - _teeth.y
-      const dz = b.z - _teeth.z
-      const far = brick.half.length() + r2
-      if (dx * dx + dy * dy + dz * dz > far * far) continue
-      if (!this.physics.intersectsBall(brick.collider, _teeth, r2)) continue
-      anyHit = true
-      if (brick.matKey === 'steel' || brick.matKey === 'frame') hitMetal = true
-      if (speed > 7.2) {
-        _imp.copy(_vel).normalize().multiplyScalar(0.3 * speed + 1.8)
-        _ang.set((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9)
-        this.buildings.breakBrick(brick, { vel: _imp, angVel: _ang, source: 'hit' })
-        hits++
-      } else {
-        brick.hp -= speed * 0.9
-        if (brick.hp <= 0) {
-          _imp.copy(_vel).normalize().multiplyScalar(0.28 * speed + 1.4)
-          _ang.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8)
-          this.buildings.breakBrick(brick, { vel: _imp, angVel: _ang, source: 'hit' })
+    let maxSpeed = 0
+    let impact = null
+
+    for (let p = 0; p < this._parts.length; p++) {
+      const part = this._parts[p]
+      const speed = part.speed
+      if (speed < 0.45) continue
+      if (speed > maxSpeed) maxSpeed = speed
+      const r2 = part.radius
+      for (let i = 0; i < bricks.length; i++) {
+        const brick = bricks[i]
+        if (brick.broken || brick._hitStep === step) continue
+        const b = brick.pos
+        const dx = b.x - part.pos.x
+        const dy = b.y - part.pos.y
+        const dz = b.z - part.pos.z
+        const far = brick.half.length() + r2
+        if (dx * dx + dy * dy + dz * dz > far * far) continue
+        if (!brick.collider.intersectsShape(part.shape, part.pos, part.quat)) continue
+        brick._hitStep = step
+        anyHit = true
+        if (!impact) impact = part.pos
+        if (brick.matKey === 'steel' || brick.matKey === 'frame') hitMetal = true
+        if (speed > part.breakSpeed) {
+          _imp.copy(part.dir).multiplyScalar(0.3 * speed + 1.8)
+          _ang.set((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9)
+          this.buildings.breakBrick(brick, { vel: _imp, angVel: _ang, source: 'hit', speed })
           hits++
+        } else {
+          brick.hp -= speed * part.dmg
+          if (brick.hp <= 0) {
+            _imp.copy(part.dir).multiplyScalar(0.28 * speed + 1.4)
+            _ang.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8)
+            this.buildings.breakBrick(brick, { vel: _imp, angVel: _ang, source: 'hit', speed })
+            hits++
+          }
         }
+        if (hits >= 8) break
       }
-      if (hits >= 5) break
+      if (hits >= 8) break
     }
+
     if (anyHit) {
       if (this._impactCd <= 0) {
-        this.audio.impact(Math.min(1, speed / 7), hitMetal)
+        this.audio.impact(Math.min(1, maxSpeed / 7), hitMetal)
         this._impactCd = 0.09
       }
       if (this._dustCd <= 0) {
-        this.particles.burst(_teeth, Math.min(14, 3 + speed * 2), 1.2 + speed * 1.6, { spread: 1.2, up: 1.4 })
+        this.particles.burst(impact, Math.min(14, 3 + maxSpeed * 2), 1.2 + maxSpeed * 1.6, { spread: 1.2, up: 1.4 })
         this._dustCd = 0.06
       }
     }
   }
 
   _step(dt) {
+    this._stepCount++
     this.input.update()
     const inp = this.input
 
     const isPlaying = this.mission.state === 'playing' || this.mission.state === 'countdown'
     if (isPlaying) {
       this.excavator.update(dt, inp, this.time)
-      this._bucketDig()
+      this._machineDamage()
     }
     this.mission.update(dt)
     this.buildings.update(dt)

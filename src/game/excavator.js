@@ -59,6 +59,9 @@ const _dir = new THREE.Vector3()
 const _up = new THREE.Vector3(0, 1, 0)
 const _fwd = new THREE.Vector3()
 const _q = new THREE.Quaternion()
+const _q2 = new THREE.Quaternion()
+const _q3 = new THREE.Quaternion()
+const _zAxis = new THREE.Vector3(0, 0, 1)
 const _c1 = new THREE.Vector3()
 const _c2 = new THREE.Vector3()
 const _c3 = new THREE.Vector3()
@@ -91,6 +94,21 @@ export class Excavator {
     this._prevTeeth = new THREE.Vector3()
     this._teethWorld = new THREE.Vector3()
     this.teethVel = new THREE.Vector3()
+    this._prevBoomTip = new THREE.Vector3()
+    this._prevArmTip = new THREE.Vector3()
+    this._prevBodyProbe = new THREE.Vector3()
+    this._boomWorld = new THREE.Vector3()
+    this._armWorld = new THREE.Vector3()
+    this._bucketBodyWorld = new THREE.Vector3()
+    this._boomTipWorld = new THREE.Vector3()
+    this._armTipWorld = new THREE.Vector3()
+    this._bodyProbeWorld = new THREE.Vector3()
+    this._boomQuat = new THREE.Quaternion()
+    this._armQuat = new THREE.Quaternion()
+    this._bucketQuat = new THREE.Quaternion()
+    this.boomTipVel = new THREE.Vector3()
+    this.armTipVel = new THREE.Vector3()
+    this.bodyProbeVel = new THREE.Vector3()
 
     this._buildTracks()
     this._buildHull()
@@ -297,6 +315,17 @@ export class Excavator {
     return out
   }
 
+  _trackVel(prev, cur, out, dt) {
+    _dir.subVectors(cur, prev)
+    const dist = _dir.length()
+    out.set(0, 0, 0)
+    if (dt > 0) {
+      const spd = dist / dt
+      out.copy(_dir).normalize().multiplyScalar(Math.min(14, spd))
+    }
+    prev.copy(cur)
+  }
+
   update(dt, input, time) {
     const driveY = input.get('driveY')
     const turn = input.get('driveX')
@@ -367,14 +396,40 @@ export class Excavator {
 
     // 铲斗齿世界坐标
     this._cabToWorldVec(teethCx, teethCy, this._teethWorld)
-    _dir.subVectors(this._teethWorld, this._prevTeeth)
-    const dist = _dir.length()
-    this.teethVel.set(0, 0, 0)
-    if (dt > 0) {
-      const spd = dist / dt
-      this.teethVel.copy(_dir).normalize().multiplyScalar(Math.min(14, spd))
-    }
-    this._prevTeeth.copy(this._teethWorld)
+    this._trackVel(this._prevTeeth, this._teethWorld, this.teethVel, dt)
+
+    // 大臂/小臂/铲斗箱体/车身 的世界位置（与视觉网格对齐）
+    const bpX = 0.62
+    const bpY = 0.62
+    const boomTipX = bpX + L1 * cosA1
+    const boomTipY = bpY + L1 * sinA1
+    const armTipX = boomTipX + L2 * cosA12
+    const armTipY = boomTipY + L2 * sinA12
+
+    // 大臂体积中心（大臂杆 3.5 x 0.42 x 0.5）
+    this._cabToWorldVec(bpX + 1.75 * cosA1 + 0.05 * sinA1, bpY + 1.75 * sinA1 - 0.05 * cosA1, this._boomWorld)
+    // 小臂体积中心（小臂杆 2.9 x 0.32 x 0.38，从小臂转轴起算）
+    this._cabToWorldVec(boomTipX + 1.45 * cosA12 + 0.08 * sinA12, boomTipY + 1.45 * sinA12 - 0.08 * cosA12, this._armWorld)
+    // 铲斗箱体中心
+    this._cabToWorldVec(armTipX + 0.4 * cosTot + 0.28 * sinTot, armTipY + 0.4 * sinTot - 0.28 * cosTot, this._bucketBodyWorld)
+
+    // 速度探针点：大臂尖端、小臂尖端、车身前角
+    this._cabToWorldVec(boomTipX, boomTipY, this._boomTipWorld)
+    this._cabToWorldVec(armTipX, armTipY, this._armTipWorld)
+    _v1.set(1.6, 0, 1.5).applyAxisAngle(_up, this.yaw).add(this.pos)
+    this._bodyProbeWorld.copy(_v1)
+    this._trackVel(this._prevBoomTip, this._boomTipWorld, this.boomTipVel, dt)
+    this._trackVel(this._prevArmTip, this._armTipWorld, this.armTipVel, dt)
+    this._trackVel(this._prevBodyProbe, this._bodyProbeWorld, this.bodyProbeVel, dt)
+
+    // 大臂/小臂/铲斗 的世界朝向
+    _q3.setFromAxisAngle(_up, this.yaw + this.cabYaw)
+    _q2.setFromAxisAngle(_zAxis, a1)
+    this._boomQuat.copy(_q3).multiply(_q2)
+    _q2.setFromAxisAngle(_zAxis, a1 + a2)
+    this._armQuat.copy(_q3).multiply(_q2)
+    _q2.setFromAxisAngle(_zAxis, a1 + a2 + a3)
+    this._bucketQuat.copy(_q3).multiply(_q2)
 
     // 物理体
     this.physics.moveKinematic(this.body, this.pos, _q.setFromAxisAngle(_up, this.yaw))
@@ -389,6 +444,33 @@ export class Excavator {
 
   getTeethPos(out) {
     return out.copy(this._teethWorld)
+  }
+
+  fillParts(arr) {
+    arr[0].pos.copy(this._teethWorld)
+    arr[0].quat.identity()
+    arr[0].speed = this.teethVel.length()
+    arr[0].dir.copy(this.teethVel).normalize()
+
+    arr[1].pos.copy(this._bucketBodyWorld)
+    arr[1].quat.copy(this._bucketQuat)
+    arr[1].speed = this.teethVel.length()
+    arr[1].dir.copy(this.teethVel).normalize()
+
+    arr[2].pos.copy(this._boomWorld)
+    arr[2].quat.copy(this._boomQuat)
+    arr[2].speed = this.boomTipVel.length()
+    arr[2].dir.copy(this.boomTipVel).normalize()
+
+    arr[3].pos.copy(this._armWorld)
+    arr[3].quat.copy(this._armQuat)
+    arr[3].speed = this.armTipVel.length()
+    arr[3].dir.copy(this.armTipVel).normalize()
+
+    arr[4].pos.copy(this.pos)
+    arr[4].quat.setFromAxisAngle(_up, this.yaw)
+    arr[4].speed = this.bodyProbeVel.length()
+    arr[4].dir.copy(this.bodyProbeVel).normalize()
   }
 
   getCabForward(out) {
@@ -424,6 +506,9 @@ export class Excavator {
     this._curR = 0
     this.speed = 0
     this._prevTeeth.copy(this.pos)
+    this._prevBoomTip.copy(this.pos)
+    this._prevArmTip.copy(this.pos)
+    this._prevBodyProbe.copy(this.pos)
     this.update(1 / 60, { get: () => 0 }, 0)
   }
 

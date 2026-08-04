@@ -132,7 +132,7 @@ export class BuildingManager {
       this.debris.spawn(brick.matKey, brick.pos, brick.half, vel, ang)
     }
     brick.building.hpLost += brick.maxHp
-    this.onBreak?.(brick, opts.source ?? 'hit')
+    this.onBreak?.(brick, opts.source ?? 'hit', opts.speed)
     for (const d of brick.dependents) {
       d.supportCount--
       if (d.supportCount <= 0 && !d.broken) {

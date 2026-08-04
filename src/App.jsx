@@ -4,7 +4,6 @@ import Hud from './components/Hud.jsx'
 import MenuScreen from './components/MenuScreen.jsx'
 import ResultScreen from './components/ResultScreen.jsx'
 import PauseScreen from './components/PauseScreen.jsx'
-import TouchControls from './components/TouchControls.jsx'
 import { CONTRACTS, GAME_VERSION } from './game/constants.js'
 
 const INITIAL_SNAP = {
@@ -30,7 +29,6 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [muted, setMuted] = useState(false)
   const [cameraName, setCameraName] = useState('跟随视角')
-  const [touchUi, setTouchUi] = useState(false)
   const toastId = useRef(0)
 
   useEffect(() => {
@@ -65,7 +63,6 @@ export default function App() {
         console.error('[EDM] init failed:', err)
         setSnap((s) => ({ ...s, fatalError: String(err && err.stack ? err.stack : err) }))
       })
-    setTouchUi(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0)
     return () => {
       disposed = true
       engine.dispose()
@@ -119,15 +116,6 @@ export default function App() {
         />
       )}
 
-      {inGame && touchUi && (
-        <TouchControls
-          engine={engineRef.current}
-          onCamera={() => cb((e) => e.cycleCamera())}
-          onPause={() => cb((e) => e.pause())}
-          cameraName={cameraName}
-        />
-      )}
-
       {/* 提示 toast */}
       <div className="pointer-events-none absolute left-1/2 top-20 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
@@ -139,7 +127,7 @@ export default function App() {
 
       {screen === 'menu' && (
         <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 -translate-x-1/2 text-[11px] text-white/35">
-          挖掘机拆迁模拟器 v{GAME_VERSION} · 全部模型与音效程序化生成 · 支持触屏
+          挖掘机拆迁模拟器 v{GAME_VERSION} · 全部模型与音效程序化生成
         </div>
       )}
 
